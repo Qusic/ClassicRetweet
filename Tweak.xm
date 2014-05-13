@@ -1,25 +1,49 @@
 #import <Foundation/Foundation.h>
 
-@interface TwitterComposition : NSObject
-@property(nonatomic) NSRange initialSelectedRange;
-- (id)initWithInitialText:(NSString *)text;
+#pragma mark - Headers
+
+@interface TFNTwitterAccount : NSObject
 @end
 
-%hook TwitterComposition
+@interface TFNTwitterUser : NSObject
+@property(readonly, nonatomic) NSString *username;
+@end
 
-- (id)initWithInitialText:(NSString *)text
+@interface TFNTwitterStatus : NSObject
+@property(readonly, nonatomic) TFNTwitterStatus *representedStatus;
+@property(readonly, nonatomic) NSString *textWithExpandedURLs;
+@property(retain, nonatomic) TFNTwitterUser *fromUser;
+@end
+
+@interface TFNTwitterComposition : NSObject
+@property(nonatomic) NSRange initialSelectedRange;
++ (NSString *)quoteTweetTextForStatus:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account;
+@end
+
+@interface TFNTwitterCompositionBuilder : NSObject
++ (TFNTwitterComposition *)compositionWithQuoteTweet:(id)arg1 fromAccount:(TFNTwitterAccount *)account;
+@end
+
+@interface NSString (TFNHTMLEntity)
+- (NSString *)stringByUnescapingHTMLEntities;
+@end
+
+#pragma mark - Hooks
+
+%hook TFNTwitterComposition
++ (NSString *)quoteTweetTextForStatus:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account
 {
-    if([text hasPrefix:@"“"] && [text hasSuffix:@"”"])
-    {
-        text = [text substringWithRange:NSMakeRange(1, [text length]-2)];
-        text = [@" RT " stringByAppendingString:text];
-        id r = %orig;
-        [r setInitialSelectedRange:NSMakeRange(0,0)];
-        return r;
-    } else {
-        id r = %orig;
-        return r;
-    }
+    NSString *username = status.representedStatus.fromUser.username;
+    NSString *statusText = status.textWithExpandedURLs.stringByUnescapingHTMLEntities;
+    return [NSString stringWithFormat:@"RT @%@: %@", username, statusText];
 }
+%end
 
+%hook TFNTwitterCompositionBuilder
++ (TFNTwitterComposition *)compositionWithQuoteTweet:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account
+{
+    TFNTwitterComposition *composition = %orig;
+    composition.initialSelectedRange = NSMakeRange(0, 0);
+    return composition;
+}
 %end
