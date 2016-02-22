@@ -1,5 +1,4 @@
 #import <Foundation/Foundation.h>
-#import <dlfcn.h>
 
 #pragma mark - Headers
 
@@ -7,34 +6,43 @@
 @end
 
 @interface TFNTwitterUser : NSObject
-@property(readonly, nonatomic) NSString *username;
+@property(readonly) NSString *username;
 @end
 
 @interface TFNTwitterStatus : NSObject
-@property(readonly, nonatomic) TFNTwitterStatus *representedStatus;
-@property(readonly, nonatomic) NSString *textWithExpandedURLs;
-@property(retain, nonatomic) TFNTwitterUser *fromUser;
+@property(retain) TFNTwitterUser *fromUser;
+@property(readonly) TFNTwitterStatus *representedStatus;
+@property(readonly) NSString *textWithExpandedURLs;
 @end
 
 @interface TFNTwitterComposition : NSObject
-@property(nonatomic) NSRange initialSelectedRange;
+@property(assign) NSRange initialSelectedRange;
+@property(retain) TFNTwitterUser *replyToUser;
+@property(retain) TFNTwitterStatus *replyToStatus;
+@property(retain) TFNTwitterStatus *quotedStatus;
 + (NSString *)quoteTweetTextForStatus:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account;
+- (instancetype)initWithInitialText:(NSString *)initialText;
 @end
 
 @interface TFNTwitterCompositionBuilder : NSObject
-+ (TFNTwitterComposition *)compositionWithQuoteTweet:(id)arg1 fromAccount:(TFNTwitterAccount *)account;
++ (TFNTwitterComposition *)compositionForReplyToTweet:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account;
++ (TFNTwitterComposition *)compositionWithQuoteTweet:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account;
 @end
 
 @interface TFNActionSheetController : NSObject
-@property(retain, nonatomic) NSArray *buttons;
+@property(retain) NSArray *actionItems;
 @end
 
-@interface TFNActionSheetButton : NSObject
-@property(copy, nonatomic) NSString *title;
-@property(copy, nonatomic) void (^action)(void);
-@property(nonatomic) BOOL delaysAction;
-+ (instancetype)buttonWithTitle:(NSString *)title action:(void (^)(void))action;
-+ (instancetype)buttonWithTitle:(NSString *)title delayedAction:(void (^)(void))action;
+@interface TFNActionItem : NSObject
+@property(copy) NSString *title;
+@property(copy) void (^action)(void);
++ (instancetype)actionItemWithTitle:(NSString *)title action:(void (^)(void))action;
++ (instancetype)cancelActionItemWithTitle:(NSString *)title action:(void (^)(void))action;
++ (instancetype)destructiveActionItemWithTitle:(NSString *)title action:(void (^)(void))action;
+@end
+
+@interface TFSLocalized : NSObject
++ (NSString *)localizedString:(NSString *)string;
 @end
 
 @interface NSString (TFNHTMLEntity)
@@ -43,8 +51,7 @@
 
 #pragma mark - Hooks
 
-static BOOL overrideQuoteTweetExperiment;
-static NSString *(*TFNLocalizedString)(NSString *key);
+static BOOL isClassicRetweet;
 
 %hook TFNTwitterComposition
 + (NSString *)quoteTweetTextForStatus:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account {
@@ -56,42 +63,37 @@ static NSString *(*TFNLocalizedString)(NSString *key);
 
 %hook TFNTwitterCompositionBuilder
 + (TFNTwitterComposition *)compositionWithQuoteTweet:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account {
-    TFNTwitterComposition *composition = %orig;
-    composition.initialSelectedRange = NSMakeRange(0, 0);
-    return composition;
+    if (isClassicRetweet) {
+        NSString *initialText = [%c(TFNTwitterComposition) quoteTweetTextForStatus:status fromAccount:account];
+        TFNTwitterComposition *composition = [[%c(TFNTwitterComposition) alloc]initWithInitialText:initialText];
+        composition.replyToUser = status.representedStatus.fromUser;
+        composition.replyToStatus = status.representedStatus;
+        composition.initialSelectedRange = NSMakeRange(0, 0);
+        return composition;
+    } else {
+        return %orig;
+    }
 }
 %end
 
-%hook TFNTwitterAccount
-- (BOOL)isInQuoteTweetComposeExperiment {
-    return overrideQuoteTweetExperiment ? NO : %orig;
-}
-%end
-
-%hook T1TweetContextActions
-+ (TFNActionSheetController *)retweetActionSheetForStatus:(TFNTwitterStatus *)status account:(TFNTwitterAccount *)account viewController:(id)viewController source:(id)source scribeParameters:(id)scribeParameters doneBlock:(id)doneBlock willQuoteRetweetBlock:(id)willQuoteRetweetBlock {
+%hook UIViewController
+- (TFNActionSheetController *)t1_retweetActionSheetForStatus:(TFNTwitterStatus *)status account:(TFNTwitterAccount *)account source:(id)source scribeParameters:(id)scribeParameters willQuoteRetweetBlock:(id)willQuoteRetweetBlock doneBlock:(id)doneBlock {
     TFNActionSheetController *sheet = %orig;
-    NSUInteger quoteTweetIndex = [sheet.buttons indexOfObjectPassingTest:^(TFNActionSheetButton *button, NSUInteger index, BOOL *stop) {
-        return [button.title isEqualToString:TFNLocalizedString(@"QUOTE_TWEET_ACTION_LABEL")];
+    NSUInteger quoteTweetIndex = [sheet.actionItems indexOfObjectPassingTest:^(TFNActionItem *actionItem, NSUInteger index, BOOL *stop) {
+        return [actionItem.title isEqualToString:[%c(TFSLocalized) localizedString:@"QUOTE_TWEET_ACTION_LABEL"]];
     }];
     if (quoteTweetIndex != NSNotFound) {
-        NSMutableArray *buttons = sheet.buttons.mutableCopy;
-        TFNActionSheetButton *quoteTweetButton = buttons[quoteTweetIndex];
-        TFNActionSheetButton *classicRetweetButton = [%c(TFNActionSheetButton) buttonWithTitle:@"Classic Retweet" action:quoteTweetButton.action ? ^{
-            overrideQuoteTweetExperiment = YES;
-            quoteTweetButton.action();
-            overrideQuoteTweetExperiment = NO;
+        NSMutableArray *actionItems = sheet.actionItems.mutableCopy;
+        TFNActionItem *quoteTweetItem = actionItems[quoteTweetIndex];
+        TFNActionItem *classicRetweetItem = [%c(TFNActionItem) actionItemWithTitle:@"Classic Retweet" action:quoteTweetItem.action ? ^{
+            isClassicRetweet = YES;
+            quoteTweetItem.action();
+            isClassicRetweet = NO;
         } : NULL];
-        [buttons insertObject:classicRetweetButton atIndex:quoteTweetIndex + 1];
-        sheet.buttons = buttons;
+        [actionItems insertObject:classicRetweetItem atIndex:quoteTweetIndex + 1];
+        sheet.actionItems = actionItems;
     }
     return sheet;
 }
 %end
 
-%ctor {
-    @autoreleasepool {
-        %init;
-        TFNLocalizedString = dlsym(RTLD_DEFAULT, "TFNLocalizedString");
-    }
-}
