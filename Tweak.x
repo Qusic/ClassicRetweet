@@ -9,6 +9,10 @@
 @property(readonly) NSString *username;
 @end
 
+@interface TFNTwitterUserReference : NSObject
+@property(readonly) NSString *username;
+@end
+
 @interface TFNTwitterStatus : NSObject
 @property(retain) TFNTwitterUser *fromUser;
 @property(readonly) TFNTwitterStatus *representedStatus;
@@ -16,11 +20,14 @@
 @end
 
 @interface TFNTwitterComposition : NSObject
-@property(assign) NSRange initialSelectedRange;
-@property(retain) TFNTwitterUser *replyToUser;
 @property(retain) TFNTwitterStatus *replyToStatus;
 @property(retain) TFNTwitterStatus *quotedStatus;
+@property(retain) TFNTwitterUserReference *replyToUserReference;
+@property(retain) NSString *replyPlaceholderText;
+@property(assign) NSRange initialSelectedRange;
 + (NSString *)quoteTweetTextForStatus:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account;
++ (NSString *)replyAllTextForStatus:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account getReplyToUserReference:(TFNTwitterUserReference **)reference initialSelectionRange:(NSRange **)selectionRange;
++ (NSString *)replyAllPlaceholderForStatus:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account;
 - (instancetype)initWithInitialText:(NSString *)initialText;
 @end
 
@@ -65,9 +72,13 @@ static BOOL isClassicRetweet;
 + (TFNTwitterComposition *)compositionWithQuoteTweet:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account {
     if (isClassicRetweet) {
         NSString *initialText = [%c(TFNTwitterComposition) quoteTweetTextForStatus:status fromAccount:account];
+        NSString *placeholder = [%c(TFNTwitterComposition) replyAllPlaceholderForStatus:status fromAccount:account];
+        TFNTwitterUserReference *userReference = nil;
+        [%c(TFNTwitterComposition) replyAllTextForStatus:status fromAccount:account getReplyToUserReference:&userReference initialSelectionRange:NULL];
         TFNTwitterComposition *composition = [[%c(TFNTwitterComposition) alloc]initWithInitialText:initialText];
-        composition.replyToUser = status.representedStatus.fromUser;
         composition.replyToStatus = status.representedStatus;
+        composition.replyToUserReference = userReference;
+        composition.replyPlaceholderText = placeholder;
         composition.initialSelectedRange = NSMakeRange(0, 0);
         return composition;
     } else {
