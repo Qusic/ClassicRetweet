@@ -1,4 +1,5 @@
 .theos
-.DS_Store
+obj
+packages
 *.swp
-*.deb
+.DS_Store
