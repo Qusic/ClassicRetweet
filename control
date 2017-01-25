@@ -1,5 +1,5 @@
 Package: org.thebigboss.classicretweet
-Version: 0.6
+Version: 0.7
 Section: Tweaks
 Maintainer: BigBoss <bigboss@thebigboss.org>
 Depends: firmware (>= 4.0), mobilesubstrate
