@@ -53,7 +53,7 @@
 @end
 
 @interface NSString (TFNHTMLEntity)
-- (NSString *)stringByUnescapingHTMLEntities;
+- (NSString *)tfs_stringByUnescapingHTMLEntities;
 @end
 
 #pragma mark - Hooks
@@ -63,7 +63,7 @@ static BOOL isClassicRetweet;
 %hook TFNTwitterComposition
 + (NSString *)quoteTweetTextForStatus:(TFNTwitterStatus *)status fromAccount:(TFNTwitterAccount *)account {
     NSString *username = status.representedStatus.fromUser.username;
-    NSString *statusText = status.textWithExpandedURLs.stringByUnescapingHTMLEntities;
+    NSString *statusText = status.textWithExpandedURLs.tfs_stringByUnescapingHTMLEntities;
     return [NSString stringWithFormat:@"RT @%@: %@", username, statusText];
 }
 %end
